@@ -1,0 +1,2 @@
+python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence krum --heter dirichlet --alpha 1 --lr_b 0.01 --visualize
+python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence krum --heter dirichlet --alpha 10 --lr_b 0.01 --visualize

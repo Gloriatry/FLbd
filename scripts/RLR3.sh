@@ -1,0 +1,3 @@
+# python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter label_noniid --alpha 0.5 --robustLR_threshold 2 --lr_b 0.001
+# python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter label_noniid --alpha 0.7 --robustLR_threshold 2 --lr_b 0.001
+python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter label_noniid --alpha 0.9 --robustLR_threshold 2 --lr_b 0.001

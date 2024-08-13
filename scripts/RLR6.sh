@@ -1,0 +1,4 @@
+# python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter dirichlet --alpha 0.1 --robustLR_threshold 4 --lr_b 0.001
+# python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter dirichlet --alpha 0.5 --robustLR_threshold 4 --lr_b 0.001
+python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter dirichlet --alpha 1 --robustLR_threshold 4 --lr_b 0.001
+python main_fed.py --epochs 600 --malicious 0 --dataset cifar --model resnet --defence RLR --heter dirichlet --alpha 10 --robustLR_threshold 4 --lr_b 0.001
