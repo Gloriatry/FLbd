@@ -199,7 +199,7 @@ class LocalMaliciousUpdate(object):
                 net, dataset_test, args, test_backdoor=True)
             print("local Testing accuracy: {:.2f}".format(acc_test))
             print("local Backdoor accuracy: {:.2f}".format(backdoor_acc))
-        return net.state_dict(), sum(epoch_loss) / len(epoch_loss)
+        return net, sum(epoch_loss) / len(epoch_loss)
     
     def train_malicious_dba(self, net, test_img=None, dataset_test=None, args=None):
         net.train()
@@ -225,7 +225,7 @@ class LocalMaliciousUpdate(object):
                 net, dataset_test, args, test_backdoor=True)
             print("local Testing accuracy: {:.2f}".format(acc_test))
             print("local Backdoor accuracy: {:.2f}".format(backdoor_acc))
-        return net.state_dict(), sum(epoch_loss) / len(epoch_loss)
+        return net, sum(epoch_loss) / len(epoch_loss)
         
 
     def save_img(self, image):

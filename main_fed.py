@@ -12,7 +12,7 @@ from models.Update import LocalUpdate
 from utils.info import print_exp_details, write_info_to_accfile, get_base_info
 from utils.options import args_parser
 from utils.sampling import mnist_iid, mnist_noniid, cifar_iid, cifar_noniid, dirichlet, mnist7
-from utils.defense import fltrust, multi_krum, get_update, RLR, flame
+from utils.defense import fltrust, multi_krum, get_update, RLR, flame, fl_defender
 import torch
 from torchvision import datasets, transforms
 import numpy as np
@@ -106,6 +106,13 @@ if __name__ == '__main__':
             ma_writer = SummaryWriter("../logs/MA/{}_{}_{}_{}_{}_{}_{}_{}_{}".format(args.dataset, args.attack, args.malicious, args.defence, args.heter, args.alpha, args.lr_b, args.lr, args.robustLR_threshold))
         else:
             ma_writer = SummaryWriter("../logs/MA/{}_{}_{}_{}_{}_{}_{}_{}_{}_{}".format(args.dataset, args.attack, args.malicious, args.defence, args.heter, args.alpha, args.lr_b, args.lr, args.robustLR_threshold, args.visualize))
+    elif args.defence == 'fl_defender':
+        fldefender_file = f'../files/{args.dataset}_{args.attack}_{args.malicious}_{args.defence}_{args.heter}_{args.alpha}_{args.lr_b}_{args.lr}_{args.visualize}.txt'
+        if math.isclose(args.malicious, 0) == False:
+            ba_writer = SummaryWriter("../logs/BA/{}_{}_{}_{}_{}_{}_{}_{}".format(args.dataset, args.attack, args.malicious, args.defence, args.heter, args.alpha, args.lr_b, args.lr))
+            ma_writer = SummaryWriter("../logs/MA/{}_{}_{}_{}_{}_{}_{}_{}".format(args.dataset, args.attack, args.malicious, args.defence, args.heter, args.alpha, args.lr_b, args.lr))
+        else:
+            ma_writer = SummaryWriter("../logs/MA/{}_{}_{}_{}_{}_{}_{}_{}_{}".format(args.dataset, args.attack, args.malicious, args.defence, args.heter, args.alpha, args.lr_b, args.lr, args.visualize))
     else:
         if math.isclose(args.malicious, 0) == False:
             ba_writer = SummaryWriter("../logs/BA/{}_{}_{}_{}_{}_{}_{}_{}".format(args.dataset, args.attack, args.malicious, args.defence, args.heter, args.alpha, args.lr_b, args.lr))
@@ -216,6 +223,8 @@ if __name__ == '__main__':
         args.dba_sign=0
     if args.defence == "krum" or args.defence == "multi-krum":
         args.krum_distance=[]
+    if args.defence == "fl_defender":
+        score_history = np.zeros([args.num_users], dtype = float)
     
     adversaries = [i for i in range(args.num_users) if i % num_classes == 1]
 
@@ -227,7 +236,12 @@ if __name__ == '__main__':
         if not args.all_clients:
             w_locals = []
             w_updates = []
+            local_models = []
         m = max(int(args.frac * args.num_users), 1)
+        if val_acc_list[-1] > backdoor_begin_acc:
+            attack_number = int(args.malicious * m)
+        else:
+            attack_number = 0
         if math.isclose(args.malicious, 0) and args.visualize == True and args.heter != "iid":
             if args.heter == 'label_noniid':
                 idxs_users = [random.randint(10*i, 10*i+9) for i in range(10)]
@@ -236,13 +250,13 @@ if __name__ == '__main__':
             elif args.heter == 'mnist7':
                 idxs_users = list(np.random.choice(range(5), 1, replace=False)) + \
                         list(np.random.choice(range(5, 100), m - 1, replace=False))
+        elif math.isclose(args.malicious, 0) == False:
+            idxs_users = list(np.random.choice(adversaries, attack_number, replace=False)) + \
+                        list(np.random.choice(list(set(range(args.num_users))-set(adversaries)), m - attack_number, replace=False))
         else:
             idxs_users = np.random.choice(range(args.num_users), m, replace=False)
-        if val_acc_list[-1] > backdoor_begin_acc:
-            attack_number = int(args.malicious * m)
-        else:
-            attack_number = 0
         
+        # idxs_attacker = np.random.choice(adversaries, attack_number, replace=False)
         for num_turn, idx in enumerate(idxs_users):
             if attack_number > 0:
                 attack = True
@@ -250,7 +264,7 @@ if __name__ == '__main__':
                 attack = False
             if attack == True:
                 # idx = random.randint(0, int(args.num_users * args.malicious))
-                idx = random.choice(adversaries)
+                # idx = idxs_attacker[attack_number-1]
                 if args.attack == "dba":
                     num_dba_attacker = int(args.num_users * args.malicious)
                     dba_group = num_dba_attacker/4
@@ -258,18 +272,20 @@ if __name__ == '__main__':
                     args.dba_sign+=1
                 local = LocalMaliciousUpdate(args=args, dataset=dataset_train, idxs=dict_users[idx], order=idx)
                 if args.attack == "layerattack_ER_his" or args.attack == "LFA" or args.attack == "LPA":
-                    w, loss, args.attack_layers = local.train(
+                    local_model, loss, args.attack_layers = local.train(
                         net=copy.deepcopy(net_glob).to(args.device), test_img = test_img)
                 else:
-                    w, loss = local.train(
+                    local_model, loss = local.train(
                         net=copy.deepcopy(net_glob).to(args.device), test_img = test_img)
                 print("client", idx, "--attack--")
                 attack_number -= 1
             else:
                 local = LocalUpdate(
                     args=args, dataset=dataset_train, idxs=dict_users[idx])
-                w, loss = local.train(
+                local_model, loss = local.train(
                     net=copy.deepcopy(net_glob).to(args.device))
+            w = local_model.state_dict()
+            local_models.append(local_model)
             w_updates.append(get_update(w, w_glob))
             if args.all_clients:
                 w_locals[idx] = copy.deepcopy(w)
@@ -302,6 +318,8 @@ if __name__ == '__main__':
             w_glob = fltrust(w_updates, fltrust_norm, w_glob, args)
         elif args.defence == 'flame':
             w_glob = flame(w_locals,w_updates,w_glob, args)
+        elif args.defence == 'fl_defender':
+            w_glob = fl_defender(copy.deepcopy(net_glob), copy.deepcopy(local_models), score_history, idxs_users, fldefender_file, iter)
         else:
             print("Wrong Defense Method")
             os._exit(0)

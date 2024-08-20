@@ -5,6 +5,9 @@ import copy
 import time
 import hdbscan
 import math
+import sklearn.metrics.pairwise as smp
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 def cos(a, b):
     # res = np.sum(a*b.T)/((np.sqrt(np.sum(a * a.T)) + 1e-9) * (np.sqrt(np.sum(b * b.T))) + 1e-
@@ -361,4 +364,57 @@ def flame(local_model, update_params, global_model, args):
         temp = temp.normal_(mean=0,std=args.noise*clip_value)
         var += temp
     return global_model
+
+def get_pca(data):
+    data = StandardScaler().fit_transform(data)
+    pca = PCA(n_components=2)
+    data = pca.fit_transform(data)
+    return data
+
+def average_weights(w, marks):
+    """
+    Returns the average of the weights.
+    """
+    w_avg = copy.deepcopy(w[0])
+    for key in w_avg.keys():
+        w_avg[key] = w_avg[key] * marks[0]
+    for key in w_avg.keys():
+        for i in range(1, len(w)):
+            w_avg[key] += w[i][key] * marks[i]
+        w_avg[key] = w_avg[key] *(1/sum(marks))
+    return w_avg
+
+def fl_defender(global_model, local_models, score_history, selected_users, filename, epoch):
+    global_model = list(global_model.parameters())
+    last_g = global_model[-2].cpu().data.numpy()  # 返回的是最后一层线性层的权重
+    m = len(local_models)
+    f_grads = [None for i in range(m)]
+    for i in range(m):
+        grad= (last_g - \
+                list(local_models[i].parameters())[-2].cpu().data.numpy())
+        f_grads[i] = grad.reshape(-1)
+
+    cs = smp.cosine_similarity(f_grads) - np.eye(m)
+    cs = get_pca(cs)
+    centroid = np.median(cs, axis = 0)  # 计算中位数
+    if epoch % 100 == 1:
+        with open(filename, 'a') as f:
+            f.write(str(epoch) + '\n')
+            for row in cs:
+                line = ",".join(map(str, row))
+                f.write(f"{line}\n") 
+            centroid_line = ",".join(map(str, centroid))
+            f.write(centroid_line + "\n")
+    scores = smp.cosine_similarity([centroid], cs)[0]
+
+    # print('-> Update score history')
+    # score_history[selected_users]+= scores
+    print("cosine scores:", scores)
+    q1 = np.quantile(scores, 0.25)
+    trust = scores - q1 
+    trust = trust/trust.max()
+    trust[(trust < 0)] = 0
+
+    local_weights = [local_model.state_dict() for local_model in local_models]
     
+    return average_weights(local_weights, trust)
